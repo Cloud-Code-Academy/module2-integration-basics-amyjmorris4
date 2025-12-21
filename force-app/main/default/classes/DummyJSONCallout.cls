@@ -29,23 +29,41 @@ public with sharing class DummyJSONCallout {
      * If the callout is successful and returns an HTTP status of 200, the method will update a contact based on the DummyJSON_Id__c with the data returned from the external system.
 	 * Use the createContactFromJson method to parse the JSON response and create a Salesforce Contact object.
      * Documentation: https://dummyjson.com/docs/users
-	 * This callout method should work in triggers
+	 * This callout method should work in triggers 
 	 * 
      * @param dummyUserId The ID of the user in the external system to fetch data for.
      */
 
 	public static void getDummyJSONUserFromId(String dummyUserId) {
 		// Create HTTP request to send.
+		HttpRequest req = new HttpRequest();
 
 		// Set the endpoint URL. Use direct URL or for best practices use Named Credential.
+		//Format: callout: NAMED_CREDENTIAL_NAME/path/to/resource
+		String endpoint = 'callout:DummyJSON_Endpoint/users/' + dummyUserId;
+		req.setEndpoint(endpoint);
 
 		// Set the HTTP method to GET.
+		req.setMethod('GET');
 
 		// Send the HTTP request and get the response.
+		Http http = new Http();
+		HttpResponse res = http.send(req);
 
 		// If the HTTP response code is successful, parse the JSON response and update the contact.
-		Contact cont = null;
-		upsert cont DummyJSON_Id__c; //insert/update from the JSON response using the external id (dummyUserId)
+		if (res.getStatusCode() >= 200 && res.getStatusCode() < 300) {
+			// Parse the JSON response to create a Contact object.
+			Contact cont = createContactFromJson(res.getBody());
+
+			// Set the external ID field for upsert operation.
+			cont.DummyJSON_Id__c = dummyUserId;
+
+			// Upsert the contact using the external ID.
+		upsert cont DummyJSON_Id__c;
+		} else {
+			// Handle error response if needed.
+			System.debug('Failed to fetch user data: ' + res.getStatus());
+		}
 	}
 
 	/* 
@@ -66,16 +84,31 @@ public with sharing class DummyJSONCallout {
 	@TestVisible // Allows test class to see this method. Since it is private, it would not be visible otherwise.
 	private static Contact createContactFromJson(String jsonResponse) {
 		// Deserialize the JSON string into map of primitive data types.
+		Map<String, Object> userMap = (Map<String, Object>) JSON.deserializeUntyped(jsonResponse);
 
 		// Create a new contact from the JSON response.
+		Contact cont = new Contact();
 
 		// Set the contact fields from the JSON response.
-
+		cont.LastName = (String) userMap.get('lastName');
+		cont.Email = (String) userMap.get('email');
+		cont.Phone = (String) userMap.get('phone');
+		
+		String birthDateStr = (String) userMap.get('birthDate');
+		if (birthDateStr != null) {
+			cont.Birthdate = Date.valueOf(birthDateStr);
+		}
 		// Deserialize the address from the JSON response.
-
+		Map<String, Object> addressMap = (Map<String, Object>) userMap.get('address');
 		// Set the address fields on the contact.
-
-		return null;
+		if (addressMap != null) {
+			cont.MailingStreet = (String) addressMap.get('address');
+			cont.MailingCity = (String) addressMap.get('city');
+			cont.MailingPostalCode = (String) addressMap.get('postalCode');
+			cont.MailingState = (String) addressMap.get('state');
+			cont.MailingCountry = (String) addressMap.get('country');
+		}
+		return cont;
 	}
 
 	/* 
@@ -85,7 +118,7 @@ public with sharing class DummyJSONCallout {
      * If the callout is successful (HTTP status code between 200 and 299), the method updates the contact's 'DummyJSON_Last_Updated__c' field in Salesforce to the current time.
 	 * Salesforce Contact should be used to generate the JSON payload
 	 * Fields: Id, FirstName, LastName, Email, Phone
-	 * This callout method should work in triggers
+	 * This callout method should work in triggers 
 	 * 
      * Documentation: https://dummyjson.com/docs/users
      * 
@@ -94,16 +127,32 @@ public with sharing class DummyJSONCallout {
 	
 	public static void postCreateDummyJSONUser(String contactId) {
 		// Create HTTP request to send.
+		HttpRequest req = new HttpRequest();
 
 		// Set the endpoint URL. Use direct URL or for best practices use Named Credential.
+		//Format: callout: NAMED_CREDENTIAL_NAME/path/to/resource
+		String endpoint = 'callout:DummyJSON_Endpoint/users/add';
+		req.setEndpoint(endpoint);
 
 		// Set the HTTP method to POST.
+		req.setMethod('POST');
+		req.setHeader('Content-Type', 'application/json');
 
 		// Set the body using generateDummyJsonUserPayload method.
-
+		req.setBody(generateDummyJsonUserPayload(contactId));
 		// Send the HTTP request and get the response.
+		Http http = new Http();
+		HttpResponse res = http.send(req);
 
 		// If the HTTP response code is successful, update the contact.
+		if (res.getStatusCode() >= 200 && res.getStatusCode() < 300) {
+			// Update the contact's DummyJSON_Last_Updated__c field to current time.
+			Contact contToUpdate = new Contact(Id = contactId, DummyJSON_Last_Updated__c = System.now());
+			update contToUpdate;
+		} else {
+			// Handle error response if needed.
+			System.debug('Failed to create/update user data: ' + res.getStatus());
+		}
 	}
 
 	/*
@@ -124,13 +173,30 @@ public with sharing class DummyJSONCallout {
 	@TestVisible // Allows test class to see this method. Since it is private, it would not be visible otherwise.
 	private static String generateDummyJsonUserPayload(String contactId) {
 		// Query the contact to get the field values to generate the JSON payload.
+		Contact cont = [SELECT Id, FirstName, LastName, Email, Phone FROM Contact WHERE Id = :contactId LIMIT 1];
 
 		// Create a map of the field values.
+		Map<String, Object> userMap = new Map<String, Object>();
+		userMap.put('salesforceId', cont.Id);
+		userMap.put('firstName', String.isBlank(cont.FirstName) ? 'Unknown' : cont.FirstName);
+		userMap.put('lastName', String.isBlank(cont.LastName) ? 'Unknown' : cont.LastName);
+		userMap.put('email', String.isBlank(cont.Email) ? 'Unknown' : cont.Email);
+		userMap.put('phone', String.isBlank(cont.Phone) ? 'Unknown' : cont.Phone);
 
 		// Serialize the map into a JSON string.
-		// Make sure to check that required contacts fields have a value. Default the value to unknown if it does not exists.
-		// Integration data can change over time. It is a best practice to add safeguards/validation to ensure the integration does not break.
+		return JSON.serialize(userMap);
 
-		return null;
+		// Make sure to check that required contacts fields have a value. Default the value to unknown if it does not exists.
+
+		// Integration data can change over time. It is a best practice to add safeguards/validation to ensure the integration does not break.
+	}
+
+	/*
+	 * Upserts a Contact record into Salesforce using the external ID field.
+	 * 
+	 * @param cont The Contact object to upsert.
+	 */
+	private static void upsertContact(Contact cont) {
+		upsert cont DummyJSON_Id__c;
 	}
 }

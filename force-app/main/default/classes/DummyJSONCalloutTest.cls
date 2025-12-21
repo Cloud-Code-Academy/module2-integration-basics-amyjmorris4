@@ -48,9 +48,9 @@ public with sharing class DummyJSONCalloutTest {
 			cont.MailingPostalCode,
 			'MailingPostalCode does not match your value: ' + cont.MailingPostalCode
 		);
-		System.assertEquals('TS', cont.MailingState, 'MailingState does not match your value: ' + cont.MailingState);
+		System.assertEquals('California', cont.MailingState, 'MailingState does not match your value: ' + cont.MailingState);
 		System.assertEquals(
-			'Testland',
+			'United States',
 			cont.MailingCountry,
 			'MailingCountry does not match your value: ' + cont.MailingCountry
 		);
@@ -127,8 +127,8 @@ public with sharing class DummyJSONCalloutTest {
 		System.assertEquals('123 Test St', cont.MailingStreet, 'MailingStreet does not match.');
 		System.assertEquals('Test City', cont.MailingCity, 'MailingCity does not match.');
 		System.assertEquals('12345', cont.MailingPostalCode, 'MailingPostalCode does not match.');
-		System.assertEquals('TS', cont.MailingState, 'MailingState does not match.');
-		System.assertEquals('Testland', cont.MailingCountry, 'MailingCountry does not match.');
+		System.assertEquals('California', cont.MailingState, 'MailingState does not match.');
+		System.assertEquals('United States', cont.MailingCountry, 'MailingCountry does not match.');
 	}
 
 	@IsTest
